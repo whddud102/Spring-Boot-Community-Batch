@@ -17,7 +17,6 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * 휴면 회원 Job 설정 클래스
@@ -35,9 +34,9 @@ public class InactiveUserJobConfig {
      * @return 휴면 회원 배치 Job
      */
     @Bean
-    public Job inactiveUserJobConfig(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep) {
+    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep) {
         return jobBuilderFactory.get("inactiveUserJob") // "inactiveUserJob 이라는 JobBuilder 생성
-                .start(inactiveJobStep).build();
+                .preventRestart().start(inactiveJobStep).build();
     }
 
     @Bean
@@ -74,7 +73,7 @@ public class InactiveUserJobConfig {
     @Bean
     @StepScope
     public QueueItemReader<User> inactiveUserReader() {
-        List<User> oldUsers = userRepository.findByUpdatedBeforeAndStatusEquls(LocalDateTime.now().minusYears(1), UserStatus.ACTIVE);
+        List<User> oldUsers = userRepository.findByUpdatedDateBeforeAndStatusEquals(LocalDateTime.now().minusYears(1), UserStatus.ACTIVE);
         return new QueueItemReader<>(oldUsers);
     }
 
