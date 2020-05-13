@@ -2,6 +2,7 @@ package com.community.batch.jobs;
 
 import com.community.batch.domain.User;
 import com.community.batch.domain.enums.UserStatus;
+import com.community.batch.jobs.readers.QueueItemReader;
 import com.community.batch.repository.UserRepository;
 import lombok.AllArgsConstructor;
 import org.springframework.batch.core.Job;
@@ -9,11 +10,14 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemWriter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * 휴면 회원 Job 설정 클래스
@@ -39,17 +43,39 @@ public class InactiveUserJobConfig {
     @Bean
     public Step inactiveUserJobStep(StepBuilderFactory stepBuilderFactory) {
         return stepBuilderFactory.get("inactiveUserStep").<User, User> chunk(10)
-                .reader(inacUserReader())
+                .reader(inactiveUserReader())
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
                 .build();
+    }
+
+    /**
+     * Chunk 단위로 아이템을 받아서 DB에 저장하는 ItemWriter 를 반환
+     * @return ItemWriter
+     */
+    private ItemWriter<User> inactiveUserWriter() {
+        return ((List<? extends User> users) -> userRepository.saveAll(users));  // 람다식 이용
+    }
+
+
+    /**
+     * 배치 처리의 비즈니스 로직을 담당하는 ItemProcessor 를 반환하는 메서드
+     * @return ItemProcessor
+     */
+    private ItemProcessor<User, User> inactiveUserProcessor() {
+        return new ItemProcessor<User, User>() {
+            @Override
+            public User process(User item) throws Exception {
+                return item.setInactive();     // User 객체를 휴면 상태로 전환
+            }
+        };
     }
 
     @Bean
     @StepScope
     public QueueItemReader<User> inactiveUserReader() {
         List<User> oldUsers = userRepository.findByUpdatedBeforeAndStatusEquls(LocalDateTime.now().minusYears(1), UserStatus.ACTIVE);
-        return QueueItemReader<>(oldUsers);
+        return new QueueItemReader<>(oldUsers);
     }
 
 
