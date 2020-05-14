@@ -21,6 +21,8 @@ import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 
 import javax.persistence.EntityManagerFactory;
 import java.time.LocalDateTime;
@@ -71,13 +73,25 @@ public class InactiveUserJobConfig {
     }
 
     @Bean
-    public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, ListItemReader<User> inactiveUserReader, InactiveStepListener inactiveStepListener) {
+    public Step inactiveJobStep(
+            StepBuilderFactory stepBuilderFactory,
+            ListItemReader<User> inactiveUserReader,
+            InactiveStepListener inactiveStepListener,
+            TaskExecutor taskExecutor) {
         return stepBuilderFactory.get("inactiveUserStep").<User, User> chunk(CHUNK_SIZE)
                 .reader(inactiveUserReader)
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
                 .listener(inactiveStepListener) // Step Listener를 등록
+                .taskExecutor(taskExecutor)     // taskExecutor 객체를 등록해서 멀티 스레드로 Step을 여러개 수행
+                .throttleLimit(2)       // 스레드를 동시에 실행시킬 최대 개수
                 .build();
+    }
+
+    @Bean
+    public TaskExecutor taskExecutor() {
+        // 스레드를 요청할 때 마다 새로운 스레드를 생성하는 SimpleAsnyTaskExecutor 객체를 빈으로 등록
+        return new SimpleAsyncTaskExecutor("Batch_Task");
     }
 
 
