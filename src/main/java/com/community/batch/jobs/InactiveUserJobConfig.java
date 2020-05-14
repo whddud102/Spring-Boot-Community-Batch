@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * 휴면 회원 Job 설정 클래스
@@ -53,15 +54,15 @@ public class InactiveUserJobConfig {
             JobBuilderFactory jobBuilderFactory,
             Step inactiveJobStep,
             InactiveJobListener inactiveJobListener,
-            Flow inactiveJobFlow) {
+            Flow multiFlow) {
         return jobBuilderFactory.get("inactiveUserJob") // "inactiveUserJob 이라는 JobBuilder 생성
                 .preventRestart()
                 .listener(inactiveJobListener)  // Job Execution Listener 를 등록
-                .start(inactiveJobFlow).end()   // Flow를 거쳐 Step을 실행하도록 설정
+                .start(multiFlow).end()   // Flow를 거쳐 Step을 실행하도록 설정
                 .build();
     }
-
-    @Bean
+    
+    // @Bean - 여러 개의 inactiveFLow 객체를 생성하기 위해서 Bean 어노테이션을 제거
     public Flow inactiveJobFlow(Step inactiveJobStep) {
         FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow");
 
@@ -92,6 +93,19 @@ public class InactiveUserJobConfig {
     public TaskExecutor taskExecutor() {
         // 스레드를 요청할 때 마다 새로운 스레드를 생성하는 SimpleAsnyTaskExecutor 객체를 빈으로 등록
         return new SimpleAsyncTaskExecutor("Batch_Task");
+    }
+
+    @Bean
+    public Flow multiFlow(Step inactiveJobStep) {
+        Flow flows[] = new Flow[5];
+        
+        // flow 5개를 생성해서 flows 배열에 할당
+        IntStream.range(0, flows.length)
+                .forEach(i -> flows[i] = new FlowBuilder<Flow>("multiFlow" + i).from(inactiveJobFlow(inactiveJobStep)).end());
+
+        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("MultiFlowTest");
+        return flowBuilder.split(taskExecutor()).add(flows) // 5개의 flow가 들어있는 flows를 taskExecutor에 추가하여 MultiFlowTest 이름을 갖는 Flow 생성
+                .build();    
     }
 
 
