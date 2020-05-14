@@ -2,6 +2,7 @@ package com.community.batch.jobs;
 
 import com.community.batch.domain.User;
 import com.community.batch.domain.enums.UserStatus;
+import com.community.batch.jobs.inactive.InactiveJobExecutionDecider;
 import com.community.batch.jobs.inactive.listener.InactiveJobListener;
 import com.community.batch.jobs.inactive.listener.InactiveStepListener;
 import com.community.batch.repository.UserRepository;
@@ -11,6 +12,9 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.core.job.builder.FlowBuilder;
+import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.job.flow.FlowExecutionStatus;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.support.ListItemReader;
@@ -43,12 +47,27 @@ public class InactiveUserJobConfig {
      * @return 휴면 회원 배치 Job
      */
     @Bean
-    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep, InactiveJobListener inactiveJobListener) {
+    public Job inactiveUserJob(
+            JobBuilderFactory jobBuilderFactory,
+            Step inactiveJobStep,
+            InactiveJobListener inactiveJobListener,
+            Flow inactiveJobFlow) {
         return jobBuilderFactory.get("inactiveUserJob") // "inactiveUserJob 이라는 JobBuilder 생성
                 .preventRestart()
                 .listener(inactiveJobListener)  // Job Execution Listener 를 등록
-                .start(inactiveJobStep)
+                .start(inactiveJobFlow).end()   // Flow를 거쳐 Step을 실행하도록 설정
                 .build();
+    }
+
+    @Bean
+    public Flow inactiveJobFlow(Step inactiveJobStep) {
+        FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("inactiveJobFlow");
+
+        return flowBuilder
+                .start(new InactiveJobExecutionDecider())   // InactiveJobExecutionDecider를 가장 먼저 실행하도록 설정
+                .on(FlowExecutionStatus.FAILED.getName()).end() // FlowExecutionDecider의 결과가 FAILED 이면 end()로 바로 종료
+                .on(FlowExecutionStatus.COMPLETED.getName()).to(inactiveJobStep)    // FlowExecutionDecider의 결과가 COMPLETED 이면 step 실행
+                .end();
     }
 
     @Bean
