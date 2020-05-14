@@ -10,17 +10,17 @@ import org.springframework.batch.core.configuration.annotation.JobBuilderFactory
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.ItemProcessor;
-import org.springframework.batch.item.ItemReader;
-import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.support.ListItemReader;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +32,7 @@ import java.util.Map;
 @Configuration
 public class InactiveUserJobConfig {
 
-    private final static int CHUNK_SIZE = 15;
+    private final static int CHUNK_SIZE = 5;
     private final EntityManagerFactory entityManagerFactory;
 
     private UserRepository userRepository;
@@ -50,18 +50,20 @@ public class InactiveUserJobConfig {
     }
 
     @Bean
-    public Step inactiveUserJobStep(StepBuilderFactory stepBuilderFactory) {
+    public Step inactiveJobStep(StepBuilderFactory stepBuilderFactory, ListItemReader<User> inactiveUserReader) {
         return stepBuilderFactory.get("inactiveUserStep").<User, User> chunk(CHUNK_SIZE)
-                .reader(inactiveUserJpaReader())
+                .reader(inactiveUserReader)
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
                 .build();
     }
 
+
     /**
      * JpaPagingItemReader는 DB에서 원하는 크기 만큼 배치 데이터를 읽어옴
      * @return JpaPaingItemReader
      */
+    /*
     @Bean(destroyMethod = "")   // destroyedMethod 기능을 사용하지 않도록 설정
     @StepScope
     public JpaPagingItemReader<User> inactiveUserJpaReader() {
@@ -81,7 +83,9 @@ public class InactiveUserJobConfig {
         jpaPagingItemReader.setPageSize(CHUNK_SIZE);    // 한 번에 가져올 개수를 지정
 
         return jpaPagingItemReader;
-    }
+    } */
+
+
 
     /**
      * Chunk 단위로 아이템을 받아서 DB에 저장하는 ItemWriter 를 반환
@@ -107,12 +111,19 @@ public class InactiveUserJobConfig {
         };
     }
 
+    /**
+     * @param nowDate Job Parameters를 통해 전달한 기준 시각 데이터
+     * @param userRepository User Repository
+     * @return ListItemReader
+     */
     @Bean
     @StepScope
-    public ListItemReader<User> inactiveUserReader() {
-        // ListItemReader 는 데이터를 한번에 가져와 메모리에 올려놓고, read() 메서드로 하나씩 읽어와서 배치 처리 수행
-        List<User> oldUsers = userRepository.findByUpdatedDateBeforeAndStatusEquals(LocalDateTime.now().minusYears(1), UserStatus.ACTIVE);
-        return new ListItemReader<>(oldUsers);
+    public ListItemReader<User> inactiveUserReader(@Value("#{jobParameters[nowDate]}") Date nowDate, UserRepository userRepository) {
+        // Job Parameters를 통해 전달한 기준 시각 데이터를 가져와서 LocalDateTime 으로 변환
+        LocalDateTime now = LocalDateTime.ofInstant(nowDate.toInstant(), ZoneId.systemDefault());
+        List<User> inactiveUsers = userRepository.findByUpdatedDateBeforeAndStatusEquals(now.minusYears(1), UserStatus.ACTIVE);
+
+        return new ListItemReader<>(inactiveUsers);
     }
 
 
