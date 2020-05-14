@@ -38,6 +38,7 @@ public class User implements Serializable {
     private String principal;   // OAuth2 인증으로 제공 받은 키 값
     
     @Column
+    @Enumerated(EnumType.STRING)
     private SocialType socialType;      // 어떤 소셜 미디어로 인증 받았는지 여부
 
     @Column
